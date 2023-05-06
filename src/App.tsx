@@ -6,6 +6,14 @@ import { Box, Button, ChakraProvider, Grid, GridItem, HStack, Progress, SimpleGr
 import _ from "lodash";
 import { useImmer } from "use-immer";
 
+import { WorkerPool } from "./WorkerPool.ts";
+const workerPool = new WorkerPool(5);
+
+interface IRotorWorkerMessage {
+  action: string;
+  payload: any;
+}
+
 const availRotors = ["I", "II", "III", "IV", "V"];
 const rotorCombinationsAll: string[][] = [];
 for (const r1 of availRotors) {
@@ -17,7 +25,7 @@ for (const r1 of availRotors) {
     }
   }
 }
-const rotorCombinations = rotorCombinationsAll.slice(0, 48);
+const rotorCombinations = rotorCombinationsAll.slice(0);
 
 // const rotorCombinations = [["II", "V", "III"]];
 
@@ -66,60 +74,65 @@ function App() {
     return (ioc - iocMin) / (iocMax - iocMin);
   };
 
-  const rotorEnigmaWorkers = useMemo(() => {
-    return rotorCombinations.map((rc, i) => {
-      const enigmaWorker = new Worker(new URL("./enigma-worker.ts", import.meta.url), { type: "module" });
-      // enigmaWorker.postMessage({ action: "init", payload: { enigmaId: i, rotors: rc, progress: 0 } });
-      enigmaWorker.onmessage = ({ data }) => {
-        const { action, payload } = data;
-        switch (action) {
-          case "reportIOC": {
-            const { enigmaId, ioc, key } = payload;
-            setRotorSettings((draft) => {
-              const e = draft.find((e) => e.enigmaId === enigmaId);
-              if (!e) throw Error();
-              e.ioc = ioc;
-              e.rotorPositions = key.rotorPositions;
-              e.ringSettings = key.ringSettings;
-            });
-            // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
-            break;
+  const workerHandler = (data: any) => {
+    const { action, payload } = data;
+    switch (action) {
+      case "reportIOC": {
+        const { enigmaId, ioc, key } = payload;
+        setRotorSettings((draft) => {
+          const e = draft.find((e) => e.enigmaId === enigmaId);
+          if (!e) throw Error();
+          e.ioc = ioc;
+          e.rotorPositions = key.rotorPositions;
+          e.ringSettings = key.ringSettings;
+        });
+        // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
+        break;
+      }
+      case "doneRotors": {
+        const { enigmaId, bigram, ioc, key } = payload;
+        setRotorSettings((draft) => {
+          const e = draft.find((e) => e.enigmaId === enigmaId);
+          if (!e) throw Error();
+          e.bigram = bigram;
+          e.rotorPositions = key.rotorPositions;
+          e.ringSettings = key.ringSettings;
+        });
+        // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
+        return true;
+      }
+      case "reportProgress": {
+        const { progress, enigmaId } = payload;
+        setRotorSettings((draft) => {
+          const e = draft.find((e) => e.enigmaId === enigmaId);
+          if (!e) {
+            throw Error();
           }
-          case "reportBigram": {
-            const { enigmaId, bigram, key } = payload;
-            setRotorSettings((draft) => {
-              const e = draft.find((e) => e.enigmaId === enigmaId);
-              if (!e) throw Error();
-              e.bigram = bigram;
-              e.rotorPositions = key.rotorPositions;
-              e.ringSettings = key.ringSettings;
-            });
-            // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
-            break;
-          }
-          case "reportProgress": {
-            const { progress, enigmaId } = payload;
-            setRotorSettings((draft) => {
-              const e = draft.find((e) => e.enigmaId === enigmaId);
-              if (!e) {
-                throw Error();
-              }
-              e.progress = progress;
-            });
-            // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
-            break;
-          }
-        }
-      };
-      return enigmaWorker;
-    });
-  }, []);
+          e.progress = progress;
+        });
+        // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
+        break;
+      }
+    }
+    return false;
+  };
 
-  const findRotorSettings = useCallback(() => {
-    rotorEnigmaWorkers.forEach((enigmaWorker, i) =>
-      enigmaWorker.postMessage({ action: "testRotorPositions", payload: { enigmaId: i, cipherText: ciphertext, rotors: rotorCombinations[i] } })
-    );
-  }, [rotorEnigmaWorkers]);
+  const findRotorSettings = () => {
+    const byReverseColumn = [
+      11, 23, 35, 47, 59, 10, 22, 34, 46, 58, 9, 21, 33, 45, 57, 8, 20, 32, 44, 56, 7, 19, 31, 43, 55, 6, 18, 30, 42, 54, 5, 17, 29, 41, 53, 4,
+      16, 28, 40, 52, 3, 15, 27, 39, 51, 2, 14, 26, 38, 50, 1, 13, 25, 37, 49, 0, 12, 24, 36, 48,
+    ];
+
+    byReverseColumn.forEach((i) => {
+      const rc = rotorCombinations[i];
+      workerPool.queueJob(
+        "./src/enigma-worker.ts",
+        { action: "testRotorPositions", payload: { enigmaId: i, rotors: rc, ciphertext } },
+        workerHandler,
+        self
+      );
+    });
+  };
 
   const rotorDivs = useMemo(() => {
     return rotorSettings.map((e, i) => {

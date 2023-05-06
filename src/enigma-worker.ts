@@ -28,7 +28,7 @@ const getBigrams = (txt: string) => {
   return fitness;
 };
 
-const testRotorPositions = (id: number, rotors: string[], cipherText: string) => {
+const testRotorPositions = (id: number, rotors: string[], ciphertext: string) => {
   const optimalKey: IEnigmaKey = {
     rotors,
     rotorPositions: [0, 0, 0],
@@ -52,7 +52,7 @@ const testRotorPositions = (id: number, rotors: string[], cipherText: string) =>
 
         // "encrypting" the ciphertext gives back the plaintext
         // await new Promise((resolve) => setTimeout(resolve, 100)); // 3 sec
-        const plainText = enigma.encryptString(cipherText);
+        const plainText = enigma.encryptString(ciphertext);
         const ioc = getIOC(plainText);
         if (ioc > bestIOC) {
           bestIOC = ioc;
@@ -74,7 +74,7 @@ const testRotorPositions = (id: number, rotors: string[], cipherText: string) =>
   return optimalKey;
 };
 
-const testRingSetting = (id: number, key: IEnigmaKey, cipherText: string, rotor: "right" | "middle") => {
+const testRingSetting = (id: number, key: IEnigmaKey, ciphertext: string, rotor: "right" | "middle") => {
   let bestFit = -1000000000000000000000000000;
   let bestRingSetting = -1;
   for (let i = 0; i < 26; i++) {
@@ -82,7 +82,7 @@ const testRingSetting = (id: number, key: IEnigmaKey, cipherText: string, rotor:
     const r = rotor == "right" ? e.rightRotor : e.middleRotor;
     r.rotorPosition = (r.rotorPosition + i) % 26;
     r.ringSetting = i;
-    const plainText = e.encryptString(cipherText);
+    const plainText = e.encryptString(ciphertext);
     const bigramFit = getBigrams(plainText);
     // console.log(`${id}: ${i} = ${bigramFit}`, key.rotorPositions, e.getRingSettings(), e.getRotorPositions());
     if (bigramFit > bestFit) {
@@ -93,9 +93,9 @@ const testRingSetting = (id: number, key: IEnigmaKey, cipherText: string, rotor:
   return bestRingSetting;
 };
 
-const testRingSettings = (id: number, key: IEnigmaKey, cipherText: string) => {
+const testRingSettings = (id: number, key: IEnigmaKey, ciphertext: string) => {
   const rightKey = _.cloneDeep(key);
-  const rightOptimalRingSetting = testRingSetting(id, rightKey, cipherText, "right");
+  const rightOptimalRingSetting = testRingSetting(id, rightKey, ciphertext, "right");
 
   const middleKey = _.cloneDeep(rightKey);
   middleKey.ringSettings = [0, 0, rightOptimalRingSetting];
@@ -109,7 +109,7 @@ const testRingSettings = (id: number, key: IEnigmaKey, cipherText: string) => {
     },
   });
 
-  const middleOptimalRingSetting = testRingSetting(id, middleKey, cipherText, "middle");
+  const middleOptimalRingSetting = testRingSetting(id, middleKey, ciphertext, "middle");
 
   const optimKey = _.cloneDeep(key);
   optimKey.ringSettings = [0, middleOptimalRingSetting, rightOptimalRingSetting];
@@ -130,12 +130,12 @@ onmessage = async ({ data }) => {
   switch (action) {
     case "testRotorPositions": {
       // setTimeout(() => {
-      const optimalKey1 = testRotorPositions(payload.enigmaId, payload.rotors, payload.cipherText);
-      const optimalKey2 = testRingSettings(payload.enigmaId, optimalKey1, payload.cipherText);
+      const optimalKey1 = testRotorPositions(payload.enigmaId, payload.rotors, payload.ciphertext);
+      const optimalKey2 = testRingSettings(payload.enigmaId, optimalKey1, payload.ciphertext);
       const e = Enigma.createFromKey(optimalKey2);
-      const decryption = e.encryptString(payload.cipherText);
+      const decryption = e.encryptString(payload.ciphertext);
       self.postMessage({
-        action: "reportBigram",
+        action: "doneRotors",
         payload: {
           enigmaId: payload.enigmaId,
           bigram: getBigrams(decryption),
