@@ -2,6 +2,13 @@ import { Plugboard } from "./plugboard";
 import { Reflector } from "./reflector";
 import { Rotor } from "./rotor";
 
+export interface IEnigmaKey {
+  rotors: string[];
+  rotorPositions: number[];
+  ringSettings: number[];
+  plugboard?: string;
+}
+
 export class Enigma {
   public leftRotor: Rotor;
   public middleRotor: Rotor;
@@ -15,6 +22,10 @@ export class Enigma {
     this.rightRotor = new Rotor(rotors[2], rotorPositions[2], ringSettings[2]);
     this.reflector = new Reflector(reflector);
     this.plugboard = new Plugboard(plugboardConnections);
+  }
+
+  public static createFromKey(key: IEnigmaKey) {
+    return new Enigma([...key.rotors], "B", [...key.rotorPositions], [...key.ringSettings], key.plugboard || "");
   }
 
   rotate() {
@@ -55,5 +66,32 @@ export class Enigma {
       .split("")
       .map((cc) => this.encryptChar(cc))
       .join("");
+  }
+
+  getRotorPositions() {
+    return [this.leftRotor.rotorPosition, this.middleRotor.rotorPosition, this.rightRotor.rotorPosition];
+  }
+
+  getRingSettings() {
+    return [this.leftRotor.ringSetting, this.middleRotor.ringSetting, this.rightRotor.ringSetting];
+  }
+
+  setRotorPositions(left: number, middle: number, right: number) {
+    this.leftRotor.rotorPosition = left;
+    this.middleRotor.rotorPosition = middle;
+    this.rightRotor.rotorPosition = right;
+  }
+
+  getRotor(i: number) {
+    switch (i) {
+      case 1:
+        return this.rightRotor;
+      case 2:
+        return this.middleRotor;
+      case 3:
+        return this.leftRotor;
+      default:
+        throw Error("Unknown rotor number");
+    }
   }
 }

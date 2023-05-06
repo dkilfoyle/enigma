@@ -46,11 +46,11 @@ export class Rotor {
 
   encipher(k: number, pos: number, ring: number, mapping: number[]) {
     const shift = pos - ring;
-    console.log(
-      `Enciper ${k} @ ${this.name}/${pos} : shift = ${shift}, offset = ${(k + shift + 26) % 26}, mapping = ${
-        mapping[(k + shift + 26) % 26]
-      }, final = ${(mapping[(k + shift + 26) % 26] - shift + 26) % 26} `
-    );
+    // console.log(
+    //   `Enciper ${k} @ ${this.name}/${pos} : shift = ${shift}, offset = ${(k + shift + 26) % 26}, mapping = ${
+    //     mapping[(k + shift + 26) % 26]
+    //   }, final = ${(mapping[(k + shift + 26) % 26] - shift + 26) % 26} `
+    // );
     return (mapping[(k + shift + 26) % 26] - shift + 26) % 26;
   }
 
