@@ -5,8 +5,10 @@ import Odometer from "react-odometerjs";
 import { Box, Button, ChakraProvider, Grid, GridItem, HStack, Progress, SimpleGrid, Stack, VStack } from "@chakra-ui/react";
 import _ from "lodash";
 import { useImmer } from "use-immer";
+import { useCountUp } from "react-countup";
 
 import { WorkerPool } from "./WorkerPool.ts";
+import { RotorDisplay } from "./RotorDisplay.tsx";
 const workerPool = new WorkerPool(5);
 
 interface IRotorWorkerMessage {
@@ -141,26 +143,10 @@ function App() {
           <Box w="100%">
             <Progress colorScheme="green" size="sm" value={e.progress} />
           </Box>
-
           <HStack bg="lightcoral" spacing="0px">
-            <VStack className="rotor" spacing="0px">
-              <p className="rotorName">{rotorCombinations[e.enigmaId][0]}</p>
-              <p className="rotorIndicator">{(e.rotorPositions[0] + e.ringSettings[0]) % 26}</p>
-              <p className="rotorPosition">{e.rotorPositions[0]}</p>
-              <p className="ringPosition">{e.ringSettings[0]}</p>
-            </VStack>
-            <VStack className="rotor" spacing="0px">
-              <p className="rotorName">{rotorCombinations[e.enigmaId][1]}</p>
-              <p className="rotorIndicator">{(e.rotorPositions[1] + e.ringSettings[1]) % 26}</p>
-              <p className="rotorPosition">{e.rotorPositions[1]}</p>
-              <p className="ringPosition">{e.ringSettings[1]}</p>
-            </VStack>
-            <VStack className="rotor" spacing="0px">
-              <p className="rotorName">{rotorCombinations[e.enigmaId][2]}</p>
-              <p className="rotorIndicator">{(e.rotorPositions[2] + e.ringSettings[2]) % 26}</p>
-              <p className="rotorPosition">{e.rotorPositions[2]}</p>
-              <p className="ringPosition">{e.ringSettings[2]}</p>
-            </VStack>
+            <RotorDisplay name={rotorCombinations[e.enigmaId][0]} position={e.rotorPositions[0]} ring={e.ringSettings[0]}></RotorDisplay>
+            <RotorDisplay name={rotorCombinations[e.enigmaId][1]} position={e.rotorPositions[1]} ring={e.ringSettings[1]}></RotorDisplay>
+            <RotorDisplay name={rotorCombinations[e.enigmaId][2]} position={e.rotorPositions[2]} ring={e.ringSettings[2]}></RotorDisplay>
           </HStack>
           <Box w="100%" textAlign="center" className="rainbow" style={{ background: `hsl(${(1 - scaleIOC(e.ioc)) * 244}, 100%, 50%)` }}>
             <p>{e.ioc.toFixed(4)}</p>
