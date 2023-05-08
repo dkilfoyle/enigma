@@ -7,8 +7,9 @@ import _ from "lodash";
 import { useImmer } from "use-immer";
 import { useCountUp } from "react-countup";
 
-import { WorkerPool } from "./WorkerPool.ts";
-import { RotorDisplay } from "./RotorDisplay.tsx";
+import { WorkerPool } from "./utils/WorkerPool.ts";
+import { RotorDisplay } from "./components/RotorDisplay.tsx";
+import { PlugboardDisplay } from "./components/PlugboardDisplay.tsx";
 const workerPool = new WorkerPool(5);
 
 interface IRotorWorkerMessage {
@@ -65,6 +66,8 @@ function App() {
     }))
   );
   const [plainText, setPlainText] = useState("");
+  const [plugboardIOC, setPlugboardIOC] = useState(0);
+  const [plugboard, setPlugboard] = useState("");
 
   const iocOpacity = (ioc: number) => {
     let iocMin = 1;
@@ -76,7 +79,7 @@ function App() {
     return (ioc - iocMin) / (iocMax - iocMin);
   };
 
-  const workerHandler = (data: any) => {
+  const workerHandler = useCallback((data: any) => {
     const { action, payload } = data;
     switch (action) {
       case "reportIOC": {
@@ -115,9 +118,15 @@ function App() {
         // console.log("reportIOC", enigmaId, ioc, rotorPositions, progress);
         break;
       }
+      case "reportPlugboard": {
+        // console.log("reportPlugboard", payload);
+        setPlugboardIOC(payload.ioc);
+        setPlugboard(payload.plugboard);
+        break;
+      }
     }
     return false;
-  };
+  }, []);
 
   const findRotorSettings = () => {
     const byReverseColumn = [
@@ -128,13 +137,57 @@ function App() {
     byReverseColumn.forEach((i) => {
       const rc = rotorCombinations[i];
       workerPool.queueJob(
-        "./src/enigma-worker.ts",
+        "./src/decode/enigma-worker.ts",
         { action: "testRotorPositions", payload: { enigmaId: i, rotors: rc, ciphertext } },
         workerHandler,
         self
       );
     });
   };
+
+  const findPlugboardSettings = useCallback(() => {
+    // const bestEnigma = rotorSettings.reduce(
+    //   (accum, cur, i) => {
+    //     if (cur.ioc > accum.bestioc) {
+    //       accum.bestioc = cur.ioc;
+    //       accum.bestId = i;
+    //     }
+    //     return accum;
+    //   },
+    //   { bestioc: 0, bestId: -1 }
+    // );
+    // const bestSettings = rotorSettings[bestEnigma.bestId];
+    // workerPool.queueJob(
+    //   "./src/decode/plugboard-worker.ts",
+    //   {
+    //     action: "testPlugboard",
+    //     payload: {
+    //       ciphertext,
+    //       enigmaId: bestEnigma.bestId,
+    //       rotors: rotorCombinations[bestEnigma.bestId],
+    //       rotorPositions: bestSettings.rotorPositions,
+    //       ringSettings: bestSettings.ringSettings,
+    //     },
+    //   },
+    //   workerHandler,
+    //   self
+    // );
+    workerPool.queueJob(
+      "./src/decode/plugboard-worker.ts",
+      {
+        action: "testPlugboard",
+        payload: {
+          ciphertext,
+          enigmaId: 34,
+          rotors: rotorCombinations[34],
+          rotorPositions: [21, 6, 22],
+          ringSettings: [0, 3, 23],
+        },
+      },
+      workerHandler,
+      self
+    );
+  }, [rotorSettings, workerHandler]);
 
   const rotorDivs = useMemo(() => {
     return rotorSettings.map((e, i) => {
@@ -159,18 +212,21 @@ function App() {
   return (
     <ChakraProvider>
       <Stack m="10px">
-        <Button onClick={findRotorSettings} size="sm">
-          Go
-        </Button>
+        <HStack>
+          <Button onClick={findRotorSettings} size="sm">
+            Solve Rotors
+          </Button>
+          <Button onClick={findPlugboardSettings} size="sm">
+            Solve Plugboard
+          </Button>
+        </HStack>
         <SimpleGrid columns={12} spacing="15px" m="10px">
           {rotorDivs}
         </SimpleGrid>
+        <PlugboardDisplay plugboard={plugboard}></PlugboardDisplay>
       </Stack>
     </ChakraProvider>
   );
 }
 
 export default App;
-function useCallblack(arg0: () => void, arg1: never[]) {
-  throw new Error("Function not implemented.");
-}
