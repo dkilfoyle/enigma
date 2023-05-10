@@ -12,8 +12,7 @@ export const RotorDisplay = memo(function RotorDisplay({ name, position, ring }:
   return (
     <VStack className="rotor" spacing="0px">
       <p className="rotorName">{name}</p>
-      <CountUp className="rotorIndicator" end={(position + ring) % 26}></CountUp>
-      <p className="rotorPosition">{position}</p>
+      <CountUp className="rotorIndicator" end={position}></CountUp>
       <p className="ringPosition">{ring}</p>
     </VStack>
   );

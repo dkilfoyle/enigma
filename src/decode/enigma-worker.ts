@@ -2,11 +2,22 @@ import _ from "lodash";
 import { Enigma, IEnigmaKey } from "../encode/enigma";
 import { getIOC, getBigrams } from "./Fitness";
 
+const reportProgress = (id: number, progress: number) => {
+  self.postMessage({
+    action: "reportRotorProgress",
+    payload: {
+      id,
+      progress,
+    },
+  });
+};
+
 const testRotorPositions = async (id: number, rotors: string[], ciphertext: string) => {
   const optimalKey: IEnigmaKey = {
     rotors,
-    rotorPositions: [0, 0, 0],
+    rotorIndicators: [0, 0, 0],
     ringSettings: [0, 0, 0],
+    plugboard: "",
   };
   const enigma = Enigma.createFromKey(optimalKey);
   let bestIOC = 0;
@@ -15,13 +26,8 @@ const testRotorPositions = async (id: number, rotors: string[], ciphertext: stri
   for (const leftStartPosition of az) {
     // await new Promise((resolve) => setTimeout(resolve, 10)); // 3 sec
     for (const middleStartPosition of az) {
-      self.postMessage({
-        action: "reportProgress",
-        payload: {
-          enigmaId: id,
-          progress: ((25 + middleStartPosition * 25 + leftStartPosition * 25 * 25) / (25 * 25 * 25)) * 80,
-        },
-      });
+      reportProgress(id, ((25 + middleStartPosition * 25 + leftStartPosition * 25 * 25) / (25 * 25 * 25)) * 80);
+
       for (const rightStartPosition of az) {
         enigma.setRotorPositions(leftStartPosition, middleStartPosition, rightStartPosition);
 
@@ -31,12 +37,12 @@ const testRotorPositions = async (id: number, rotors: string[], ciphertext: stri
         const ioc = getIOC(plainText);
         if (ioc > bestIOC) {
           bestIOC = ioc;
-          optimalKey.rotorPositions = [leftStartPosition, middleStartPosition, rightStartPosition];
+          optimalKey.rotorIndicators = [leftStartPosition, middleStartPosition, rightStartPosition];
           optimalKey.ringSettings = enigma.getRingSettings();
           self.postMessage({
-            action: "reportIOC",
+            action: "reportRotorSettings",
             payload: {
-              enigmaId: id,
+              id: id,
               ioc,
               key: optimalKey,
             },
@@ -49,17 +55,24 @@ const testRotorPositions = async (id: number, rotors: string[], ciphertext: stri
   return optimalKey;
 };
 
-const testRingSetting = (id: number, key: IEnigmaKey, ciphertext: string, rotor: "right" | "middle") => {
+const testRingSetting = (id: number, key: IEnigmaKey, ciphertext: string, rotor: number) => {
   let bestFit = -1000000000000000000000000000;
   let bestRingSetting = -1;
+
+  const originalIndicators = key.rotorIndicators;
+  const originalRingSettings = key.ringSettings;
+
   for (let i = 0; i < 26; i++) {
-    const e = Enigma.createFromKey(key);
-    const r = rotor == "right" ? e.rightRotor : e.middleRotor;
-    r.rotorPosition = (r.rotorPosition + i) % 26;
-    r.ringSetting = i;
+    const currentStartingPositions = [...originalIndicators];
+    const currentRingsSettings = [...originalRingSettings];
+
+    currentStartingPositions[rotor] = (currentStartingPositions[rotor] + i) % 26;
+    currentRingsSettings[rotor] = i;
+
+    const e = new Enigma(key.rotors, "B", currentStartingPositions, currentRingsSettings, "");
     const plainText = e.encryptString(ciphertext);
     const bigramFit = getBigrams(plainText);
-    // console.log(`${id}: ${i} = ${bigramFit}`, key.rotorPositions, e.getRingSettings(), e.getRotorPositions());
+
     if (bigramFit > bestFit) {
       bestFit = bigramFit;
       bestRingSetting = i;
@@ -69,57 +82,43 @@ const testRingSetting = (id: number, key: IEnigmaKey, ciphertext: string, rotor:
 };
 
 const testRingSettings = (id: number, key: IEnigmaKey, ciphertext: string) => {
-  const rightKey = _.cloneDeep(key);
-  const rightOptimalRingSetting = testRingSetting(id, rightKey, ciphertext, "right");
+  const newKey = _.cloneDeep(key);
 
-  const middleKey = _.cloneDeep(rightKey);
-  middleKey.ringSettings = [0, 0, rightOptimalRingSetting];
-  middleKey.rotorPositions[2] = (middleKey.rotorPositions[2] + middleKey.ringSettings[2]) % 26; // starting position
+  // optimise right rotor
+  const rightOptimalRingSetting = testRingSetting(id, newKey, ciphertext, 2);
+  newKey.ringSettings[2] = rightOptimalRingSetting;
+  newKey.rotorIndicators[2] = (newKey.rotorIndicators[2] + rightOptimalRingSetting) % 26;
+  reportProgress(id, 90);
 
-  self.postMessage({
-    action: "reportProgress",
-    payload: {
-      enigmaId: id,
-      progress: 90,
-    },
-  });
+  // optimise middle rotor
+  const middleOptimalRingSetting = testRingSetting(id, newKey, ciphertext, 1);
+  newKey.ringSettings[1] = middleOptimalRingSetting;
+  newKey.rotorIndicators[1] = (newKey.rotorIndicators[1] + middleOptimalRingSetting) % 26;
+  reportProgress(id, 100);
 
-  const middleOptimalRingSetting = testRingSetting(id, middleKey, ciphertext, "middle");
-
-  const optimKey = _.cloneDeep(key);
-  optimKey.ringSettings = [0, middleOptimalRingSetting, rightOptimalRingSetting];
-
-  self.postMessage({
-    action: "reportProgress",
-    payload: {
-      enigmaId: id,
-      progress: 100,
-    },
-  });
-
-  return optimKey;
+  return newKey;
 };
 
 onmessage = async ({ data }) => {
   const { action, payload } = data;
   switch (action) {
     case "testRotorPositions": {
-      // setTimeout(() => {
-      const optimalKey1 = await testRotorPositions(payload.enigmaId, payload.rotors, payload.ciphertext);
-      const optimalKey2 = testRingSettings(payload.enigmaId, optimalKey1, payload.ciphertext);
+      const optimalKey1 = await testRotorPositions(payload.id, payload.rotors, payload.ciphertext);
+      const optimalKey2 = testRingSettings(payload.id, optimalKey1, payload.ciphertext);
       const e = Enigma.createFromKey(optimalKey2);
       const decryption = e.encryptString(payload.ciphertext);
       self.postMessage({
-        action: "doneRotors",
+        action: "reportRotorSettings",
         payload: {
-          enigmaId: payload.enigmaId,
-          bigram: getBigrams(decryption),
+          id: payload.id,
           key: optimalKey2,
+          ioc: getIOC(decryption),
+          finished: true,
         },
       });
-      // }, 0);
-
       break;
     }
+    default:
+      throw Error(`enigma-worker onmessage unknown action ${action}`);
   }
 };

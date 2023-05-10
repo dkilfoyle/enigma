@@ -54,30 +54,28 @@ export const PlugboardDisplay = memo(function PlugboardDisplay({ plugboard }: IP
   }, [plugboard]);
 
   return (
-    <Box className="plugboard" border="1px solid black" p={5}>
-      <VStack gap={5}>
-        <HStack>
-          {_.range(0, 10).map((i) => (
-            <Box w="100px" bg={keyColors[i]} textAlign="center" key={i}>
-              {qwerty[i]}
-            </Box>
-          ))}
-        </HStack>
-        <HStack>
-          {_.range(10, 19).map((i) => (
-            <Box w="100px" bg={keyColors[i]} textAlign="center" key={i}>
-              {qwerty[i]}
-            </Box>
-          ))}
-        </HStack>
-        <HStack>
-          {_.range(19, 27).map((i) => (
-            <Box w="100px" bg={keyColors[i]} textAlign="center" key={i}>
-              {qwerty[i]}
-            </Box>
-          ))}
-        </HStack>
-      </VStack>
-    </Box>
+    <VStack gap={5}>
+      <HStack>
+        {_.range(0, 10).map((i) => (
+          <Box w="100px" bg={keyColors[i]} textAlign="center" key={i}>
+            {qwerty[i]}
+          </Box>
+        ))}
+      </HStack>
+      <HStack>
+        {_.range(10, 19).map((i) => (
+          <Box w="100px" bg={keyColors[i]} textAlign="center" key={i}>
+            {qwerty[i]}
+          </Box>
+        ))}
+      </HStack>
+      <HStack>
+        {_.range(19, 27).map((i) => (
+          <Box w="100px" bg={keyColors[i]} textAlign="center" key={i}>
+            {qwerty[i]}
+          </Box>
+        ))}
+      </HStack>
+    </VStack>
   );
 });

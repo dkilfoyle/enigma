@@ -4,9 +4,9 @@ import { Rotor } from "./rotor";
 
 export interface IEnigmaKey {
   rotors: string[];
-  rotorPositions: number[];
+  rotorIndicators: number[];
   ringSettings: number[];
-  plugboard?: string;
+  plugboard: string;
 }
 
 export class Enigma {
@@ -25,7 +25,7 @@ export class Enigma {
   }
 
   public static createFromKey(key: IEnigmaKey) {
-    return new Enigma([...key.rotors], "B", [...key.rotorPositions], [...key.ringSettings], key.plugboard || "");
+    return new Enigma([...key.rotors], "B", [...key.rotorIndicators], [...key.ringSettings], key.plugboard || "");
   }
 
   rotate() {
