@@ -1,6 +1,6 @@
 import _ from "lodash";
-import { Enigma, IEnigmaKey } from "../encode/enigma";
-import { getIOC, quadgramFitness } from "./Fitness";
+import { Enigma } from "../encode/enigma";
+import { getFitness, iocFitness } from "./Fitness";
 
 const maxGenerations = 100;
 const numIndividuals = 99; // needs to be multiple of 3
@@ -13,7 +13,16 @@ const randomUnused = (max: number, used: number[]) => {
   }
 };
 
-const solvePlugboard = (id: number, rotors: string[], rotorPositions: number[], ringSettings: number[], ciphertext: string) => {
+const solvePlugboard = (
+  id: number,
+  rotors: string[],
+  rotorPositions: number[],
+  ringSettings: number[],
+  ciphertext: string,
+  fitness: string
+) => {
+  const fitnessSolver = getFitness(fitness);
+
   // generate 100 individuals each with 10 genes, each gene is a stecker
   let population: number[][][] = [];
   for (let i = 0; i < numIndividuals; i++) {
@@ -42,11 +51,11 @@ const solvePlugboard = (id: number, rotors: string[], rotorPositions: number[], 
         plugboard = plugboard.slice(0, plugboard.lastIndexOf(" "));
         const e = new Enigma(rotors, "B", rotorPositions, ringSettings, plugboard);
         const decryption = e.encryptString(ciphertext);
-        const quadgram = quadgramFitness.score(decryption);
-        const ioc = getIOC(decryption);
-        return { ioc, quadgram, individualID, plugboard };
+        const score = fitnessSolver.score(decryption);
+        const ioc = iocFitness.score(decryption);
+        return { score, ioc, individualID, plugboard };
       })
-      .sort((a, b) => b.quadgram - a.quadgram);
+      .sort((a, b) => b.score - a.score);
 
     const elite = fitness.slice(0, numIndividuals / 3);
     const middle = fitness.slice(numIndividuals / 3, (numIndividuals / 3) * 2);
@@ -145,7 +154,7 @@ onmessage = async ({ data }) => {
   switch (action) {
     case "testPlugboard": {
       _.range(0, 20).forEach((x) =>
-        solvePlugboard(payload.id, payload.rotors, payload.rotorIndicators, payload.ringSettings, payload.ciphertext)
+        solvePlugboard(payload.id, payload.rotors, payload.rotorIndicators, payload.ringSettings, payload.ciphertext, payload.fitness)
       );
       self.postMessage({
         action: "donePlugboard",

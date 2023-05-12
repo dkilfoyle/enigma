@@ -33,6 +33,7 @@ import { WorkerPool } from "./utils/WorkerPool.ts";
 import { RotorDisplay } from "./components/RotorDisplay.tsx";
 import { PlugboardDisplay } from "./components/PlugboardDisplay.tsx";
 import { Enigma, IEnigmaKey } from "./encode/enigma.ts";
+import { wordSplitter } from "./decode/WordSplitter.ts";
 const workerPool = new WorkerPool(5);
 
 const availRotors = ["I", "II", "III", "IV", "V"];
@@ -88,6 +89,9 @@ function App() {
   );
 
   const [plainText, setPlainText] = useState("");
+  const [rotorFitness, setRotorFitness] = useState("ioc");
+  const [ringFitness, setRingFitness] = useState("bigrams");
+  const [plugboardFitness, setPlugboardFitness] = useState("quadgrams");
 
   const bestEnigmas = useMemo(() => {
     return [...enigmas].sort((a, b) => b.ioc - a.ioc);
@@ -144,15 +148,40 @@ function App() {
     ];
 
     byReverseColumn.forEach((i) => {
-      const rc = rotorCombinations[i];
+      const rc = enigmas[i];
       workerPool.queueJob(
         "./src/decode/enigma-worker.ts",
-        { action: "testRotorPositions", payload: { id: i, rotors: rc, ciphertext } },
+        {
+          action: "testRotorPositions",
+          payload: { id: i, rotors: rc.key.rotors, plugboard: rc.key.plugboard, ciphertext, rotorFitness, ringFitness, rotorsAndRings: false },
+        },
         workerHandler,
         self
       );
     });
-  }, [workerHandler]);
+  }, [enigmas, rotorFitness, ringFitness, workerHandler]);
+
+  const findRotorAndRingSettings = useCallback(() => {
+    bestEnigmas.slice(0, 1).forEach((be) => {
+      workerPool.queueJob(
+        "./src/decode/enigma-worker.ts",
+        {
+          action: "testRotorPositions",
+          payload: {
+            id: be.id,
+            rotors: be.key.rotors,
+            plugboard: be.key.plugboard,
+            ciphertext,
+            rotorFitness: "quadgrams",
+            ringFitness,
+            rotorsAndRings: true,
+          },
+        },
+        workerHandler,
+        self
+      );
+    });
+  }, [bestEnigmas, ringFitness, workerHandler]);
 
   const findPlugboardSettings = useCallback(() => {
     bestEnigmas.slice(0, 10).forEach((e) => {
@@ -166,13 +195,14 @@ function App() {
             rotors: e.key.rotors,
             rotorIndicators: e.key.rotorIndicators,
             ringSettings: e.key.ringSettings,
+            fitness: plugboardFitness,
           },
         },
         workerHandler,
         self
       );
     });
-  }, [workerHandler, bestEnigmas]);
+  }, [workerHandler, bestEnigmas, plugboardFitness]);
 
   const rotorDivs = useMemo(() => {
     return enigmas.map((e, i) => {
@@ -209,6 +239,9 @@ function App() {
           <Button onClick={findPlugboardSettings} size="sm">
             Solve Plugboard
           </Button>
+          <Button onClick={findRotorAndRingSettings} size="sm">
+            Solve Rotors & Rings
+          </Button>
         </HStack>
         <Card size="sm">
           <CardBody>
@@ -228,7 +261,7 @@ function App() {
             <Heading size="sm">Best Decryption</Heading>
           </CardHeader>
           <CardBody>
-            <Textarea value={currentDecryption} readOnly></Textarea>
+            <Textarea value={wordSplitter.split(currentDecryption).join(" ")} readOnly></Textarea>
           </CardBody>
         </Card>
         <Card size="sm">

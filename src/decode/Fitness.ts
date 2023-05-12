@@ -2,7 +2,11 @@ import _ from "lodash";
 import { bigrams } from "./bigrams";
 import quadgramsTxt from "./quadgrams?raw";
 
-class QuadgramFitness {
+export interface IFitness {
+  score: (text: string) => number;
+}
+
+class QuadgramFitness implements IFitness {
   public quadgrams: number[];
   constructor() {
     this.quadgrams = _.fill(Array(845626), -9.522878745280337);
@@ -25,30 +29,49 @@ class QuadgramFitness {
   }
 }
 
+class IOCFitness implements IFitness {
+  score(txt: string) {
+    const histogram = _.fill(Array(26), 0);
+    txt.split("").forEach((c) => {
+      histogram[c.charCodeAt(0) - 65]++;
+    });
+    const n = txt.length;
+    let total = 0;
+    for (const v of histogram) {
+      total += v * (v - 1);
+    }
+    return total / (n * (n - 1));
+  }
+}
+
+class BigramsFitness implements IFitness {
+  score(txt: string) {
+    let fitness = 0;
+    const current = 0;
+    let next = txt.charAt(0);
+    for (let i = 1; i < txt.length; i++) {
+      const current = next;
+      next = txt.charAt(i);
+      const bg = bigrams[current + next];
+      fitness += bg || -9.522878745280337;
+    }
+    return fitness;
+  }
+}
+
+export const iocFitness = new IOCFitness();
+export const bigramsFitness = new BigramsFitness();
 export const quadgramFitness = new QuadgramFitness();
 
-export const getIOC = (txt: string) => {
-  const histogram = _.fill(Array(26), 0);
-  txt.split("").forEach((c) => {
-    histogram[c.charCodeAt(0) - 65]++;
-  });
-  const n = txt.length;
-  let total = 0;
-  for (const v of histogram) {
-    total += v * (v - 1);
+export const getFitness = (fitness: string) => {
+  switch (fitness) {
+    case "ioc":
+      return iocFitness;
+    case "bigrams":
+      return bigramsFitness;
+    case "quadgrams":
+      return quadgramFitness;
+    default:
+      throw Error(`Unknown fitness scorer ${fitness}`);
   }
-  return total / (n * (n - 1));
-};
-
-export const getBigrams = (txt: string) => {
-  let fitness = 0;
-  const current = 0;
-  let next = txt.charAt(0);
-  for (let i = 1; i < txt.length; i++) {
-    const current = next;
-    next = txt.charAt(i);
-    const bg = bigrams[current + next];
-    fitness += bg || -9.522878745280337;
-  }
-  return fitness;
 };
