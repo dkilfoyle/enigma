@@ -35,7 +35,7 @@ const testRotorPositions = async (
   for (const leftStartPosition of az) {
     // await new Promise((resolve) => setTimeout(resolve, 10)); // 3 sec
     for (const middleStartPosition of az) {
-      reportProgress(id, ((25 + middleStartPosition * 25 + leftStartPosition * 25 * 25) / (25 * 25 * 25)) * 80);
+      reportProgress(id, ((25 + middleStartPosition * 25 + leftStartPosition * 25 * 25) / (25 * 25 * 25)) * (rotorsAndRings ? 100 : 80));
 
       for (const rightStartPosition of az) {
         enigma.setRotorPositions(leftStartPosition, middleStartPosition, rightStartPosition);
@@ -49,7 +49,7 @@ const testRotorPositions = async (
             ringSettings: [0, 0, 0],
             plugboard,
           };
-          const optimalKey = testRingSettings(id, currentKey, ciphertext, ringFitness);
+          const optimalKey = testRingSettings(id, currentKey, ciphertext, ringFitness, rotorsAndRings);
           const e = Enigma.createFromKey(optimalKey);
           decryption = e.encryptString(ciphertext);
         } else decryption = enigma.encryptString(ciphertext);
@@ -102,7 +102,7 @@ const testRingSetting = (id: number, key: IEnigmaKey, ciphertext: string, rotor:
   return bestRingSetting;
 };
 
-const testRingSettings = (id: number, key: IEnigmaKey, ciphertext: string, ringFitness: string) => {
+const testRingSettings = (id: number, key: IEnigmaKey, ciphertext: string, ringFitness: string, rotorsAndRings = false) => {
   const fitness = getFitness(ringFitness);
   const newKey = _.cloneDeep(key);
 
@@ -110,13 +110,13 @@ const testRingSettings = (id: number, key: IEnigmaKey, ciphertext: string, ringF
   const rightOptimalRingSetting = testRingSetting(id, newKey, ciphertext, 2, fitness);
   newKey.ringSettings[2] = rightOptimalRingSetting;
   newKey.rotorIndicators[2] = (newKey.rotorIndicators[2] + rightOptimalRingSetting) % 26;
-  reportProgress(id, 90);
+  if (!rotorsAndRings) reportProgress(id, 90);
 
   // optimise middle rotor
   const middleOptimalRingSetting = testRingSetting(id, newKey, ciphertext, 1, fitness);
   newKey.ringSettings[1] = middleOptimalRingSetting;
   newKey.rotorIndicators[1] = (newKey.rotorIndicators[1] + middleOptimalRingSetting) % 26;
-  reportProgress(id, 100);
+  if (!rotorsAndRings) reportProgress(id, 100);
 
   return newKey;
 };
@@ -134,7 +134,7 @@ onmessage = async ({ data }) => {
         payload.ringFitness,
         payload.rotorsAndRings
       );
-      const optimalKey2 = testRingSettings(payload.id, optimalKey1, payload.ciphertext, payload.ringFitness);
+      const optimalKey2 = testRingSettings(payload.id, optimalKey1, payload.ciphertext, payload.ringFitness, payload.rotorsAndRings);
       const e = Enigma.createFromKey(optimalKey2);
       const decryption = e.encryptString(payload.ciphertext);
       self.postMessage({

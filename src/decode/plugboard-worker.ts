@@ -153,9 +153,7 @@ onmessage = async ({ data }) => {
   const { action, payload } = data;
   switch (action) {
     case "testPlugboard": {
-      _.range(0, 20).forEach((x) =>
-        solvePlugboard(payload.id, payload.rotors, payload.rotorIndicators, payload.ringSettings, payload.ciphertext, payload.fitness)
-      );
+      solvePlugboard(payload.id, payload.rotors, payload.rotorIndicators, payload.ringSettings, payload.ciphertext, payload.fitness);
       self.postMessage({
         action: "donePlugboard",
         payload: {

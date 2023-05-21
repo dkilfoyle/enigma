@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import Odometer from "react-odometerjs";
 
 import {
   Box,
@@ -9,14 +8,21 @@ import {
   CardBody,
   CardHeader,
   ChakraProvider,
+  Flex,
   Grid,
   GridItem,
   HStack,
   Heading,
   Progress,
   SimpleGrid,
+  Spinner,
   Stack,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
   Table,
+  Tabs,
   Tbody,
   Td,
   Textarea,
@@ -27,13 +33,16 @@ import {
 } from "@chakra-ui/react";
 import _ from "lodash";
 import { useImmer } from "use-immer";
-import { useCountUp } from "react-countup";
+import { Console, Hook, Unhook } from "console-feed";
 
 import { WorkerPool } from "./utils/WorkerPool.ts";
 import { RotorDisplay } from "./components/RotorDisplay.tsx";
 import { PlugboardDisplay } from "./components/PlugboardDisplay.tsx";
 import { Enigma, IEnigmaKey } from "./encode/enigma.ts";
 import { wordSplitter } from "./decode/WordSplitter.ts";
+import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
+import { ArrowForwardIcon } from "@chakra-ui/icons";
+import { TbCircleNumber1, TbCircleNumber2, TbCircleNumber3 } from "react-icons/tb";
 const workerPool = new WorkerPool(5);
 
 const availRotors = ["I", "II", "III", "IV", "V"];
@@ -64,15 +73,14 @@ interface IEnigma {
 
 const scaleIOC = (ioc: number) => {
   const iocRandom = 0.038466;
-  const iocEnglish = 0.066332 * 0.8;
+  const iocEnglish = 0.066332;
   return (ioc - iocRandom) / (iocEnglish - iocRandom);
 };
 
-const colorIOC = (ioc: number) => {
-  return `rgb(255,255,255 / ${Math.max(scaleIOC(ioc), 0) * 100}%)`;
-};
+let bestIOC = 0;
 
 function App() {
+  const [logs, setLogs] = useState<any[]>([]);
   const [enigmas, setEnigmas] = useImmer<IEnigma[]>(
     rotorCombinations.map((rc, i) => ({
       id: i,
@@ -92,10 +100,16 @@ function App() {
   const [rotorFitness, setRotorFitness] = useState("ioc");
   const [ringFitness, setRingFitness] = useState("bigrams");
   const [plugboardFitness, setPlugboardFitness] = useState("quadgrams");
+  const [isRotorRingSolving, setRotorRingSolving] = useState(false);
+  const [isRotorSolving, setRotorSolving] = useState(false);
+  const [isPlugboardSolving, setPlugboardSolving] = useState(false);
 
   const bestEnigmas = useMemo(() => {
     return [...enigmas].sort((a, b) => b.ioc - a.ioc);
   }, [enigmas]);
+
+  const bestEnigmasRef = useRef<IEnigma[]>();
+  bestEnigmasRef.current = bestEnigmas;
 
   const workerHandler = useCallback(
     (data: any) => {
@@ -110,7 +124,13 @@ function App() {
             e.key.rotorIndicators = key.rotorIndicators;
             e.key.ringSettings = key.ringSettings;
           });
-          if (payload.finished) return true;
+          if (ioc > bestIOC) {
+            bestIOC = parseFloat(Number(ioc).toFixed(4));
+            console.log(` - New best rotor: #${id}, ioc=${bestIOC}`);
+          }
+          if (payload.finished) {
+            return true;
+          }
           break;
         }
         case "reportRotorProgress": {
@@ -123,7 +143,7 @@ function App() {
           break;
         }
         case "reportPlugboardSettings": {
-          const { id, ioc, plugboard } = payload;
+          const { id, ioc, plugboard, generation } = payload;
           setEnigmas((draft) => {
             const e = draft.find((e) => e.id === id);
             if (!e) throw Error();
@@ -131,6 +151,11 @@ function App() {
               e.ioc = ioc;
               e.key.plugboard = plugboard;
             }
+            if (ioc > bestIOC) {
+              bestIOC = parseFloat(Number(ioc).toFixed(4));
+              console.log(` - New best plugboard: #${id}, ioc = ${bestIOC} @ generation ${generation}`);
+            }
+            e.progress = generation;
           });
           if (payload.finished) return true;
           break;
@@ -141,31 +166,66 @@ function App() {
     [setEnigmas]
   );
 
+  const doneRotors = () => {
+    if (bestEnigmasRef.current) {
+      const bestEnigma = bestEnigmasRef.current[0];
+      console.log(
+        ` - Best rotor: #${bestEnigma.id} ${bestEnigma.key.rotors.join(", ")} ${bestEnigma.key.rotorIndicators.join(
+          ", "
+        )} ${bestEnigma.key.ringSettings.join(", ")}`
+      );
+    }
+    setRotorSolving(false);
+    setRotorRingSolving(false);
+  };
+
+  const donePlugboard = () => {
+    if (bestEnigmasRef.current) {
+      const bestEnigma = bestEnigmasRef.current[0];
+      console.log(` - Best Plugboard: #${bestEnigma.id} = ${bestEnigma.key.plugboard}`);
+    }
+    setPlugboardSolving(false);
+  };
+
   const findRotorSettings = useCallback(() => {
+    setRotorSolving(true);
+    bestIOC = 0;
     const byReverseColumn = [
       11, 23, 35, 47, 59, 10, 22, 34, 46, 58, 9, 21, 33, 45, 57, 8, 20, 32, 44, 56, 7, 19, 31, 43, 55, 6, 18, 30, 42, 54, 5, 17, 29, 41, 53, 4,
       16, 28, 40, 52, 3, 15, 27, 39, 51, 2, 14, 26, 38, 50, 1, 13, 25, 37, 49, 0, 12, 24, 36, 48,
     ];
+    console.log("Solving rotor THEN ring settings...");
 
-    byReverseColumn.forEach((i) => {
+    const jobs = byReverseColumn.map((i) => {
       const rc = enigmas[i];
-      workerPool.queueJob(
-        "./src/decode/enigma-worker.ts",
-        {
+
+      return {
+        url: "./src/decode/enigma-worker.ts",
+        msg: {
           action: "testRotorPositions",
           payload: { id: i, rotors: rc.key.rotors, plugboard: rc.key.plugboard, ciphertext, rotorFitness, ringFitness, rotorsAndRings: false },
         },
-        workerHandler,
-        self
-      );
+        handler: workerHandler,
+        ctx: self,
+      };
     });
+
+    workerPool.queueJobs(jobs, doneRotors);
   }, [enigmas, rotorFitness, ringFitness, workerHandler]);
 
   const findRotorAndRingSettings = useCallback(() => {
-    bestEnigmas.slice(0, 1).forEach((be) => {
-      workerPool.queueJob(
-        "./src/decode/enigma-worker.ts",
-        {
+    setRotorRingSolving(true);
+    console.log("Solving rotor AND ring settings...");
+    console.log(` - Processing best Enigma #${bestEnigmas[0].id}`);
+    const jobs = bestEnigmas.slice(0, 1).map((be) => {
+      setEnigmas((draft) => {
+        const e = draft.find((e) => e.id === be.id);
+        if (!e) throw Error();
+        e.progress = 0;
+      });
+      return {
+        url: "./src/decode/enigma-worker.ts",
+        msg: {
           action: "testRotorPositions",
           payload: {
             id: be.id,
@@ -177,32 +237,41 @@ function App() {
             rotorsAndRings: true,
           },
         },
-        workerHandler,
-        self
-      );
+        handler: workerHandler,
+        ctx: self,
+      };
     });
-  }, [bestEnigmas, ringFitness, workerHandler]);
+    workerPool.queueJobs(jobs, doneRotors);
+  }, [bestEnigmas, ringFitness, setEnigmas, workerHandler]);
 
   const findPlugboardSettings = useCallback(() => {
-    bestEnigmas.slice(0, 10).forEach((e) => {
-      workerPool.queueJob(
-        "./src/decode/plugboard-worker.ts",
-        {
+    setPlugboardSolving(true);
+    console.log("Solving plugboard settings...");
+    const jobs = bestEnigmas.slice(0, 10).map((be) => {
+      setEnigmas((draft) => {
+        const e = draft.find((e) => e.id === be.id);
+        if (!e) throw Error();
+        e.progress = 0;
+      });
+      return {
+        url: "./src/decode/plugboard-worker.ts",
+        msg: {
           action: "testPlugboard",
           payload: {
             ciphertext,
-            id: e.id,
-            rotors: e.key.rotors,
-            rotorIndicators: e.key.rotorIndicators,
-            ringSettings: e.key.ringSettings,
+            id: be.id,
+            rotors: be.key.rotors,
+            rotorIndicators: be.key.rotorIndicators,
+            ringSettings: be.key.ringSettings,
             fitness: plugboardFitness,
           },
         },
-        workerHandler,
-        self
-      );
+        handler: workerHandler,
+        ctx: self,
+      };
     });
-  }, [workerHandler, bestEnigmas, plugboardFitness]);
+    workerPool.queueJobs(jobs, donePlugboard);
+  }, [bestEnigmas, setEnigmas, plugboardFitness, workerHandler]);
 
   const rotorDivs = useMemo(() => {
     return enigmas.map((e, i) => {
@@ -229,81 +298,123 @@ function App() {
     return e.encryptString(ciphertext);
   }, [bestEnigmas]);
 
+  useEffect(() => {
+    const hookedConsole = Hook(window.console, (log) => setLogs((currLogs) => [...currLogs, log]), false);
+    // _.range(0, 50).forEach((x) => console.log(x));
+    return () => {
+      Unhook(hookedConsole);
+    };
+  }, []);
+
   return (
     <ChakraProvider>
-      <Stack m="10px">
-        <HStack>
-          <Button onClick={findRotorSettings} size="sm">
-            Solve Rotors
-          </Button>
-          <Button onClick={findPlugboardSettings} size="sm">
-            Solve Plugboard
-          </Button>
-          <Button onClick={findRotorAndRingSettings} size="sm">
-            Solve Rotors & Rings
-          </Button>
-        </HStack>
-        <Card size="sm">
-          <CardBody>
-            <SimpleGrid columns={12} spacing="15px" m="10px">
-              {rotorDivs}
-            </SimpleGrid>
-          </CardBody>
-        </Card>
-        <Card size="sm">
-          <CardBody>
-            <PlugboardDisplay plugboard={bestEnigmas[0].key.plugboard || ""}></PlugboardDisplay>
-          </CardBody>
-        </Card>
+      <Grid p={2} height="100%">
+        <Tabs defaultIndex={1} height="100%" overflow="hidden" display="grid">
+          <TabList>
+            <Tab>Encode</Tab>
+            <Tab>Decode</Tab>
+          </TabList>
+          <TabPanels h="100%" overflow="hidden">
+            <TabPanel></TabPanel>
+            <TabPanel h="100%" overflow="hidden">
+              <Grid templateColumns={"1fr auto"} gap={5} height="100%" overflow="hidden">
+                <Stack>
+                  <HStack>
+                    <Button onClick={findRotorSettings} colorScheme={isRotorSolving ? "green" : "gray"} size="sm">
+                      <Flex gap={2}>
+                        {isRotorSolving ? <Spinner size="sm" /> : <TbCircleNumber1 size="20px" />}
+                        <span>Solve Rotors + Rings</span>
+                      </Flex>
+                    </Button>
+                    <Button onClick={findPlugboardSettings} size="sm">
+                      <Flex gap={2}>
+                        {isPlugboardSolving ? <Spinner size="sm" /> : <TbCircleNumber2 size="20px" />}
+                        <span>Solve Plugboard</span>
+                      </Flex>
+                    </Button>
+                    <Button onClick={findRotorAndRingSettings} isLoading={isRotorRingSolving} loadingText="Solving Rotors * Rings" size="sm">
+                      <Flex gap={2}>
+                        {isRotorSolving ? <Spinner size="sm" /> : <TbCircleNumber3 size="20px" />}
+                        <span>Solve Rotors * Rings</span>
+                      </Flex>
+                    </Button>
+                  </HStack>
+                  <Card size="sm" variant="outline">
+                    <CardBody>
+                      <SimpleGrid columns={12} spacing="15px" m="10px">
+                        {rotorDivs}
+                      </SimpleGrid>
+                    </CardBody>
+                  </Card>
+                  <Card size="sm" variant="outline">
+                    <CardBody>
+                      <PlugboardDisplay plugboard={bestEnigmas[0].key.plugboard || ""}></PlugboardDisplay>
+                    </CardBody>
+                  </Card>
 
-        <Card size="sm">
-          <CardHeader>
-            <Heading size="sm">Best Decryption</Heading>
-          </CardHeader>
-          <CardBody>
-            <Textarea value={wordSplitter.split(currentDecryption).join(" ")} readOnly></Textarea>
-          </CardBody>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <Heading size="sm">Best Settings</Heading>
-          </CardHeader>
-          <CardBody>
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>ID</Th>
-                  <Th>IOC</Th>
-                  <Th>Rotors</Th>
-                  <Th>Indicators</Th>
-                  <Th>Rings</Th>
-                  <Th>Plugboard</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                <Tr>
-                  <Td>{bestEnigmas[0].id}</Td>
-                  <Td>{bestEnigmas[0].ioc.toFixed(4)}</Td>
-                  <Td>{bestEnigmas[0].key.rotors.join(", ")}</Td>
-                  <Td>{bestEnigmas[0].key.rotorIndicators.join(", ")}</Td>
-                  <Td>{bestEnigmas[0].key.ringSettings.join(", ")}</Td>
-                  <Td>
-                    {bestEnigmas[0].key.plugboard == ""
-                      ? ""
-                      : bestEnigmas[0].key.plugboard
-                          .split(" ")
-                          .map((pair) => {
-                            return pair[0] < pair[1] ? pair : pair[1] + pair[0];
-                          })
-                          .sort()
-                          .join(" ")}
-                  </Td>
-                </Tr>
-              </Tbody>
-            </Table>
-          </CardBody>
-        </Card>
-      </Stack>
+                  <Card size="sm" variant="outline">
+                    <CardHeader>
+                      <Heading size="sm">Best Decryption</Heading>
+                    </CardHeader>
+                    <CardBody>
+                      <Textarea value={wordSplitter.split(currentDecryption).join(" ")} readOnly></Textarea>
+                    </CardBody>
+                  </Card>
+                  <Card size="sm" variant="outline">
+                    <CardHeader>
+                      <Heading size="sm">Best Settings</Heading>
+                    </CardHeader>
+                    <CardBody>
+                      <Table size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>ID</Th>
+                            <Th>IOC</Th>
+                            <Th>Rotors</Th>
+                            <Th>Indicators</Th>
+                            <Th>Rings</Th>
+                            <Th>Plugboard</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          <Tr>
+                            <Td>{bestEnigmas[0].id}</Td>
+                            <Td>{bestEnigmas[0].ioc.toFixed(4)}</Td>
+                            <Td>{bestEnigmas[0].key.rotors.join(", ")}</Td>
+                            <Td>{bestEnigmas[0].key.rotorIndicators.join(", ")}</Td>
+                            <Td>{bestEnigmas[0].key.ringSettings.join(", ")}</Td>
+                            <Td>
+                              {bestEnigmas[0].key.plugboard == ""
+                                ? ""
+                                : bestEnigmas[0].key.plugboard
+                                    .split(" ")
+                                    .map((pair) => {
+                                      return pair[0] < pair[1] ? pair : pair[1] + pair[0];
+                                    })
+                                    .sort()
+                                    .join(" ")}
+                            </Td>
+                          </Tr>
+                        </Tbody>
+                      </Table>
+                    </CardBody>
+                  </Card>
+                </Stack>
+                <Box h="100%" overflowY="scroll" border="1px solid lightgrey" borderRadius="3px">
+                  <Console logs={logs}></Console>
+                </Box>
+
+                {/* <Card size="sm" variant="outline" w={400} h="100%">
+                  <CardHeader>
+                    <Heading size="sm">Progress</Heading>
+                  </CardHeader>
+                  <CardBody h="100%"></CardBody>
+                </Card> */}
+              </Grid>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </Grid>
     </ChakraProvider>
   );
 }
