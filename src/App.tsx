@@ -21,6 +21,7 @@ import {
   TabList,
   TabPanel,
   TabPanels,
+  Text,
   Table,
   Tabs,
   Tbody,
@@ -309,36 +310,88 @@ function App() {
   return (
     <ChakraProvider>
       <Grid p={2} height="100%">
-        <Tabs defaultIndex={1} height="100%" overflow="hidden" display="grid">
+        <Tabs defaultIndex={1} height="100%" overflow="hidden" display="grid" gridTemplateRows={"auto 1fr"}>
           <TabList>
             <Tab>Encode</Tab>
             <Tab>Decode</Tab>
           </TabList>
-          <TabPanels h="100%" overflow="hidden">
+          <TabPanels display="grid">
             <TabPanel></TabPanel>
             <TabPanel h="100%" overflow="hidden">
               <Grid templateColumns={"1fr auto"} gap={5} height="100%" overflow="hidden">
-                <Stack>
-                  <HStack>
-                    <Button onClick={findRotorSettings} colorScheme={isRotorSolving ? "green" : "gray"} size="sm">
-                      <Flex gap={2}>
-                        {isRotorSolving ? <Spinner size="sm" /> : <TbCircleNumber1 size="20px" />}
-                        <span>Solve Rotors + Rings</span>
-                      </Flex>
-                    </Button>
-                    <Button onClick={findPlugboardSettings} size="sm">
-                      <Flex gap={2}>
-                        {isPlugboardSolving ? <Spinner size="sm" /> : <TbCircleNumber2 size="20px" />}
-                        <span>Solve Plugboard</span>
-                      </Flex>
-                    </Button>
-                    <Button onClick={findRotorAndRingSettings} isLoading={isRotorRingSolving} loadingText="Solving Rotors * Rings" size="sm">
-                      <Flex gap={2}>
-                        {isRotorSolving ? <Spinner size="sm" /> : <TbCircleNumber3 size="20px" />}
-                        <span>Solve Rotors * Rings</span>
-                      </Flex>
-                    </Button>
-                  </HStack>
+                <Grid templateRows={"repeat(3, auto) 1fr"} rowGap={5}>
+                  <Card size="sm" variant="outline">
+                    <CardBody>
+                      <Grid templateColumns="100px 1fr" gap={2}>
+                        <Text as="b">Solve</Text>
+                        <HStack>
+                          <Button onClick={findRotorSettings} colorScheme={isRotorSolving ? "green" : "gray"} size="sm">
+                            <Flex gap={2}>
+                              {isRotorSolving ? <Spinner size="sm" /> : <TbCircleNumber1 size="20px" />}
+                              <span>Solve Rotors + Rings</span>
+                            </Flex>
+                          </Button>
+                          <Button onClick={findPlugboardSettings} colorScheme={isPlugboardSolving ? "green" : "gray"} size="sm">
+                            <Flex gap={2}>
+                              {isPlugboardSolving ? <Spinner size="sm" /> : <TbCircleNumber2 size="20px" />}
+                              <span>Solve Plugboard</span>
+                            </Flex>
+                          </Button>
+                          <Button onClick={findRotorAndRingSettings} colorScheme={isRotorRingSolving ? "green" : "gray"} size="sm">
+                            <Flex gap={2}>
+                              {isRotorRingSolving ? <Spinner size="sm" /> : <TbCircleNumber3 size="20px" />}
+                              <span>Solve Rotors * Rings</span>
+                            </Flex>
+                          </Button>
+                        </HStack>
+                        <Text as="b">Solution</Text>
+                        <Grid templateColumns={"repeat(6, 1fr)"}>
+                          <Text as="b" fontSize="sm">
+                            ID
+                          </Text>
+                          <Text as="b" fontSize="sm">
+                            IOC
+                          </Text>
+                          <Text as="b" fontSize="sm">
+                            ROTORS
+                          </Text>
+                          <Text as="b" fontSize="sm">
+                            INDICATORS
+                          </Text>
+                          <Text as="b" fontSize="sm">
+                            RINGS
+                          </Text>
+                          <Text as="b" fontSize="sm">
+                            PLUGBOARD
+                          </Text>
+                          <span>{bestEnigmas[0].id}</span>
+                          <span
+                            style={{
+                              background: `linear-gradient(90deg, lightblue ${scaleIOC(bestEnigmas[0].ioc) * 100}%, transparent ${
+                                scaleIOC(bestEnigmas[0].ioc) * 100
+                              }%)`,
+                            }}>
+                            {bestEnigmas[0].ioc.toFixed(4)}
+                          </span>
+                          <span>{bestEnigmas[0].key.rotors.join(", ")}</span>
+                          <span>{bestEnigmas[0].key.rotorIndicators.join(", ")}</span>
+                          <span>{bestEnigmas[0].key.ringSettings.join(", ")}</span>
+                          <span>
+                            {bestEnigmas[0].key.plugboard == ""
+                              ? ""
+                              : bestEnigmas[0].key.plugboard
+                                  .split(" ")
+                                  .map((pair) => {
+                                    return pair[0] < pair[1] ? pair : pair[1] + pair[0];
+                                  })
+                                  .sort()
+                                  .join(" ")}
+                          </span>
+                        </Grid>
+                      </Grid>
+                    </CardBody>
+                  </Card>
+
                   <Card size="sm" variant="outline">
                     <CardBody>
                       <SimpleGrid columns={12} spacing="15px" m="10px">
@@ -357,50 +410,11 @@ function App() {
                       <Heading size="sm">Best Decryption</Heading>
                     </CardHeader>
                     <CardBody>
-                      <Textarea value={wordSplitter.split(currentDecryption).join(" ")} readOnly></Textarea>
+                      <Textarea h="100%" value={wordSplitter.split(currentDecryption).join(" ")} readOnly></Textarea>
                     </CardBody>
                   </Card>
-                  <Card size="sm" variant="outline">
-                    <CardHeader>
-                      <Heading size="sm">Best Settings</Heading>
-                    </CardHeader>
-                    <CardBody>
-                      <Table size="sm">
-                        <Thead>
-                          <Tr>
-                            <Th>ID</Th>
-                            <Th>IOC</Th>
-                            <Th>Rotors</Th>
-                            <Th>Indicators</Th>
-                            <Th>Rings</Th>
-                            <Th>Plugboard</Th>
-                          </Tr>
-                        </Thead>
-                        <Tbody>
-                          <Tr>
-                            <Td>{bestEnigmas[0].id}</Td>
-                            <Td>{bestEnigmas[0].ioc.toFixed(4)}</Td>
-                            <Td>{bestEnigmas[0].key.rotors.join(", ")}</Td>
-                            <Td>{bestEnigmas[0].key.rotorIndicators.join(", ")}</Td>
-                            <Td>{bestEnigmas[0].key.ringSettings.join(", ")}</Td>
-                            <Td>
-                              {bestEnigmas[0].key.plugboard == ""
-                                ? ""
-                                : bestEnigmas[0].key.plugboard
-                                    .split(" ")
-                                    .map((pair) => {
-                                      return pair[0] < pair[1] ? pair : pair[1] + pair[0];
-                                    })
-                                    .sort()
-                                    .join(" ")}
-                            </Td>
-                          </Tr>
-                        </Tbody>
-                      </Table>
-                    </CardBody>
-                  </Card>
-                </Stack>
-                <Box h="100%" overflowY="scroll" border="1px solid lightgrey" borderRadius="3px">
+                </Grid>
+                <Box h="100%" overflowY="auto" border="1px solid #e2e8f0" borderRadius="3px">
                   <Console logs={logs}></Console>
                 </Box>
 
